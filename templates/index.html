@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>売価調査アプリ</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --danger-color: #dc3545;
+            --success-color: #28a745;
+            --bg-color: #f8f9fa;
+            --text-color: #333;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .container {
+            width: 100%;
+            max-width: 430px; /* Mobile width */
+            min-height: 100vh;
+            background-color: #fff;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        h1 {
+            font-size: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #1a1a1a;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            outline: none;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            color: white;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-bottom: 15px;
+            transition: opacity 0.2s;
+            text-decoration: none;
+        }
+        .btn:active {
+            opacity: 0.8;
+        }
+        .btn-success {
+            background-color: var(--success-color);
+        }
+        .btn-outline {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+        }
+        /* File input hiding */
+        input[type="file"] {
+            display: none;
+        }
+        /* Thumbnail grid */
+        .status-text {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .preview-item {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #eee;
+        }
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 24px;
+            height: 24px;
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            line-height: 1;
+        }
+        /* Overlay Loading */
+        #loadingOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.9);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #loadingText {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+        /* Result screen */
+        #resultArea {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" id="mainScreen">
+    <h1>売価調査票 自動変換</h1>
+    
+    <!-- Upload area -->
+    <input type="file" id="fileInput" accept="image/*" multiple>
+    <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
+        📷 写真を撮影 / 選択
+    </button>
+
+    <div class="status-text" id="statusText">0枚選択中</div>
+    
+    <div class="preview-grid" id="previewGrid"></div>
+
+    <!-- Spacer to push submit button to bottom if desired, or just list it below -->
+    <div style="flex-grow: 1;"></div>
+
+    <button class="btn" id="submitBtn" onclick="submitData()">
+        📊 エクセルを作成する
+    </button>
+
+    <div id="resultArea">
+        <h3 style="margin-bottom: 15px; color: var(--success-color);">✅ 変換完了！</h3>
+        <button class="btn btn-success" id="downloadBtn">📁 ファイルに保存</button>
+        <button class="btn btn-outline" id="shareBtn" style="display:none;">📤 共有する (LINE等)</button>
+        <button class="btn" style="background-color: #6c757d; margin-top: 20px;" onclick="resetApp()">戻る</button>
+    </div>
+</div>
+
+<div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div id="loadingText">画像を解析中... (1/1)</div>
+</div>
+
+<script>
+    let selectedFiles = [];
+    const fileInput = document.getElementById('fileInput');
+    const previewGrid = document.getElementById('previewGrid');
+    const statusText = document.getElementById('statusText');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    // File Selection
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            // Append new files
+            selectedFiles = selectedFiles.concat(files);
+            updatePreview();
+        }
+        // Reset input so the same files can be selected again if needed
+        fileInput.value = '';
+    });
+
+    function updatePreview() {
+        previewGrid.innerHTML = '';
+        statusText.textContent = `${selectedFiles.length}枚選択中`;
+        
+        selectedFiles.forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const div = document.createElement('div');
+                div.className = 'preview-item';
+                
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.innerHTML = '×';
+                deleteBtn.onclick = () => {
+                    selectedFiles.splice(index, 1);
+                    updatePreview();
+                };
+                
+                div.appendChild(img);
+                div.appendChild(deleteBtn);
+                previewGrid.appendChild(div);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function submitData() {
+        if (selectedFiles.length === 0) {
+            alert("画像を選択してください。");
+            return;
+        }
+
+        // Show loading
+        const overlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        overlay.style.display = 'flex';
+        loadingText.textContent = `データ抽出中... (0/${selectedFiles.length})`;
+
+        const formData = new FormData();
+        selectedFiles.forEach(file => {
+            formData.append('files', file);
+        });
+
+        try {
+            const response = await fetch('/api/process', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || '処理に失敗しました');
+            }
+
+            // Received Excel Blob
+            const blob = await response.blob();
+            
+            // Create Download link
+            const url = window.URL.createObjectURL(blob);
+            const fileName = "売価調査結果.xlsx";
+            
+            const downloadBtn = document.getElementById('downloadBtn');
+            downloadBtn.onclick = () => {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            };
+
+            // Setup Web Share API if available
+            const shareBtn = document.getElementById('shareBtn');
+            if (navigator.share && navigator.canShare) {
+                // Check if device can share files
+                const file = new File([blob], fileName, { type: blob.type });
+                if (navigator.canShare({ files: [file] })) {
+                    shareBtn.style.display = 'block';
+                    shareBtn.onclick = async () => {
+                        try {
+                            await navigator.share({
+                                files: [file],
+                                title: '売価調査結果',
+                                text: '売価調査のExcelファイルです。'
+                            });
+                        } catch (err) {
+                            console.error('Share failed:', err);
+                        }
+                    };
+                }
+            }
+
+            // Hide form, show results
+            document.getElementById('submitBtn').style.display = 'none';
+            document.querySelector('.btn-outline').style.display = 'none';
+            previewGrid.style.display = 'none';
+            statusText.style.display = 'none';
+            document.getElementById('resultArea').style.display = 'block';
+
+        } catch (error) {
+            alert(`エラーが発生しました: ${error.message}`);
+        } finally {
+            overlay.style.display = 'none';
+        }
+    }
+
+    function resetApp() {
+        selectedFiles = [];
+        updatePreview();
+        document.getElementById('submitBtn').style.display = 'block';
+        document.querySelector('.btn-outline').style.display = 'block';
+        previewGrid.style.display = 'grid';
+        statusText.style.display = 'block';
+        document.getElementById('resultArea').style.display = 'none';
+    }
+</script>
+</body>
+</html>
