@@ -28,13 +28,24 @@ async def process_images(
             
         genai.configure(api_key=api_key)
         
-        # 利用可能なモデルの中から flash モデルを自動検索
-        model_name = 'gemini-1.5-flash' # デフォルト
-        for m in genai.list_models():
-            if 'gemini-1.5-flash' in m.name:
+        # 利用可能なモデルの中から画像を扱えるモデル（flash または vision）を自動検索
+        model_name = None
+        available_models = list(genai.list_models())
+        
+        for m in available_models:
+            if 'gemini-1.5-flash' in m.name and 'generateContent' in m.supported_generation_methods:
                 model_name = m.name.replace('models/', '')
                 break
                 
+        if not model_name:
+            for m in available_models:
+                if ('vision' in m.name or 'pro' in m.name) and 'generateContent' in m.supported_generation_methods:
+                    model_name = m.name.replace('models/', '')
+                    break
+                    
+        if not model_name:
+            model_name = 'gemini-1.5-flash' # 最後の手段
+            
         model = genai.GenerativeModel(model_name)
         
         prompt = """
@@ -116,7 +127,14 @@ async def process_images(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        available_str = ""
+        try:
+            available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            if available:
+                available_str = f" | 利用可能なモデル: {', '.join(available)}"
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"APIエラー: {str(e)}{available_str}")
 
 if __name__ == "__main__":
     import uvicorn
