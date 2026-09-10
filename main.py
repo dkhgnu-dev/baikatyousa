@@ -42,11 +42,13 @@ async def process_images(
         model = genai.GenerativeModel(model_name)
         
         prompt = """
-        この画像は売価調査票です。画像内の表データを抽出し、以下の列定義に従ってJSONの配列形式で出力してください。
+        アップロードされたすべての画像は売価調査票です。すべての画像内の表データを漏れなく抽出し、以下の列定義に従って「1つのJSONの配列形式」にまとめて出力してください。
+        
         抽出する列:
         ["NO", "商品コード", "商品名称", "規格", "自社売価", "競合店A", "競合店B"]
         
         注意事項:
+        - 複数枚の画像にまたがるデータを、すべて1つのJSON配列（[ {..}, {..} ]）にまとめてください。
         - 該当データがないセルは空文字("")にしてください。
         - JSON配列のみを出力してください。Markdownのコードブロック(```json ... ```)は付けないでください。
         
@@ -64,28 +66,18 @@ async def process_images(
         ]
         """
         
-        all_data = []
-        import time
-        
+        # すべての画像を1つのリクエストとしてまとめる
+        contents = [prompt]
         for file in files:
             image_bytes = await file.read()
             image = Image.open(io.BytesIO(image_bytes))
+            contents.append(image)
             
-            # 429エラー（リクエスト過多）対策のためのリトライ処理
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    response = model.generate_content([prompt, image])
-                    break # 成功したらループを抜ける
-                except Exception as e:
-                    if "429" in str(e) and attempt < max_retries - 1:
-                        time.sleep(8) # 制限に引っかかったら8秒待ってから再試行
-                    else:
-                        raise e
-            
-            # 短時間での送りすぎを防ぐため、1枚終わるごとに少し待機
-            time.sleep(1.5)
-            
+        all_data = []
+        
+        # 1回のリクエストで一気にすべての画像を解析する（超高速＆制限回避）
+        try:
+            response = model.generate_content(contents)
             response_text = response.text.strip()
             
             # Clean up markdown if model returned it
@@ -104,6 +96,8 @@ async def process_images(
                     all_data.append(data)
             except json.JSONDecodeError:
                 pass
+        except Exception as e:
+            raise e
 
         if not all_data:
             raise HTTPException(status_code=400, detail="データを抽出できませんでした。")
