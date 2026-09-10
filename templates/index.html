@@ -256,6 +256,61 @@
         });
     }
 
+    function resetApp() {
+        selectedFiles = [];
+        updatePreview();
+        document.getElementById('submitBtn').style.display = 'block';
+        document.querySelector('.btn-outline').style.display = 'block';
+        previewGrid.style.display = 'grid';
+        statusText.style.display = 'block';
+        document.getElementById('resultArea').style.display = 'none';
+    }
+
+    // 画像を自動で圧縮する関数（裏側で動きます）
+    async function compressImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = event => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // AIが読めるのに十分なサイズ（最大1500px）
+                    const MAX_WIDTH = 1500;
+                    const MAX_HEIGHT = 1500;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    canvas.toBlob(blob => {
+                        resolve(new File([blob], file.name, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        }));
+                    }, 'image/jpeg', 0.8); // 80%の画質で圧縮
+                };
+                img.onerror = error => reject(error);
+            };
+            reader.onerror = error => reject(error);
+        });
+    }
+
     async function submitData() {
         if (selectedFiles.length === 0) {
             alert("画像を選択してください。");
@@ -266,22 +321,34 @@
         const overlay = document.getElementById('loadingOverlay');
         const loadingText = document.getElementById('loadingText');
         overlay.style.display = 'flex';
-        loadingText.textContent = `データ抽出中... (0/${selectedFiles.length})`;
-
-        const formData = new FormData();
-        selectedFiles.forEach(file => {
-            formData.append('files', file);
-        });
+        loadingText.textContent = `送信の準備中... (0/${selectedFiles.length})`;
 
         try {
+            const formData = new FormData();
+            // 自動で圧縮しながら追加
+            for (let i = 0; i < selectedFiles.length; i++) {
+                loadingText.textContent = `写真の最適化中... (${i + 1}/${selectedFiles.length})`;
+                const compressedFile = await compressImage(selectedFiles[i]);
+                formData.append('files', compressedFile);
+            }
+
+            loadingText.textContent = `AIでデータを抽出中... (数分かかる場合があります)`;
+
             const response = await fetch('/api/process', {
                 method: 'POST',
                 body: formData
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || '処理に失敗しました');
+                let errorMsg = '処理に失敗しました';
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData.detail || errorMsg;
+                } catch (e) {
+                    const textData = await response.text();
+                    errorMsg = `サーバーエラーが発生しました (タイムアウトや容量オーバーの可能性があります): ${response.status}`;
+                }
+                throw new Error(errorMsg);
             }
 
             // Received Excel Blob
