@@ -28,24 +28,17 @@ async def process_images(
             
         genai.configure(api_key=api_key)
         
-        # 利用可能なモデルの中から画像を扱えるモデル（flash または vision）を自動検索
-        model_name = None
-        available_models = list(genai.list_models())
+        # 最新のモデル（gemini-3.5-flash）を使用
+        model_name = 'gemini-3.5-flash'
         
-        for m in available_models:
-            if 'gemini-1.5-flash' in m.name and 'generateContent' in m.supported_generation_methods:
-                model_name = m.name.replace('models/', '')
-                break
-                
-        if not model_name:
+        # 念のため利用可能か確認し、無ければ最新のflashモデルを探す
+        available_models = list(genai.list_models())
+        if not any(model_name in m.name for m in available_models):
             for m in available_models:
-                if ('vision' in m.name or 'pro' in m.name) and 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name and 'generateContent' in m.supported_generation_methods:
                     model_name = m.name.replace('models/', '')
                     break
                     
-        if not model_name:
-            model_name = 'gemini-1.5-flash' # 最後の手段
-            
         model = genai.GenerativeModel(model_name)
         
         prompt = """
