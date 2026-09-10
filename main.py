@@ -103,10 +103,67 @@ async def process_images(
                 df[col] = ""
         df = df[expected_columns]
         
-        # Save to Excel
+        # Save to Excel with Formatting
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='月間売価調査')
+            
+            workbook = writer.book
+            worksheet = writer.sheets['月間売価調査']
+            
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            
+            # 書式の定義
+            header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid") # 薄い青色
+            header_font = Font(bold=True)
+            thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), 
+                               top=Side(style='thin'), bottom=Side(style='thin'))
+            center_alignment = Alignment(horizontal="center", vertical="center")
+            left_alignment = Alignment(horizontal="left", vertical="center")
+            right_alignment = Alignment(horizontal="right", vertical="center")
+            
+            # 列幅の設定
+            column_widths = {
+                "A": 5,   # NO
+                "B": 15,  # 商品コード
+                "C": 35,  # 商品名称
+                "D": 15,  # 規格
+                "E": 12,  # 自社売価
+                "F": 12,  # 競合店A
+                "G": 12   # 競合店B
+            }
+            for col, width in column_widths.items():
+                worksheet.column_dimensions[col].width = width
+
+            # 1行目（見出し）の固定
+            worksheet.freeze_panes = "A2"
+
+            # 全セルの書式設定
+            for row_idx, row in enumerate(worksheet.iter_rows(min_row=1, max_row=len(df)+1, min_col=1, max_col=7), 1):
+                for col_idx, cell in enumerate(row, 1):
+                    # 罫線を引く
+                    cell.border = thin_border
+                    
+                    if row_idx == 1:
+                        # 見出し行の装飾
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = center_alignment
+                    else:
+                        # データ行の装飾
+                        if col_idx in [1, 2]: # NO, 商品コード
+                            cell.alignment = center_alignment
+                        elif col_idx in [3, 4]: # 商品名称, 規格
+                            cell.alignment = left_alignment
+                        elif col_idx in [5, 6, 7]: # 売価の列
+                            cell.alignment = right_alignment
+                            # 数字の場合はカンマ区切りにする
+                            try:
+                                if str(cell.value).replace(',', '').isdigit():
+                                    cell.value = int(str(cell.value).replace(',', ''))
+                                    cell.number_format = '#,##0'
+                            except:
+                                pass
         
         output.seek(0)
         
