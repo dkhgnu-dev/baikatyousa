@@ -27,7 +27,15 @@ async def process_images(
             raise HTTPException(status_code=500, detail="サーバー側にAPIキーが設定されていません。管理者に連絡してください。")
             
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # 利用可能なモデルの中から flash モデルを自動検索
+        model_name = 'gemini-1.5-flash' # デフォルト
+        for m in genai.list_models():
+            if 'gemini-1.5-flash' in m.name:
+                model_name = m.name.replace('models/', '')
+                break
+                
+        model = genai.GenerativeModel(model_name)
         
         prompt = """
         この画像は売価調査票です。画像内の表データを抽出し、以下の列定義に従ってJSONの配列形式で出力してください。
